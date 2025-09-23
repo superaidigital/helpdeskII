@@ -45,14 +45,18 @@ if (isset($_SESSION['role']) && $_SESSION['role'] === 'user' && !$is_reporter) {
 
 // --- Define Editing & Evaluation Permissions ---
 $is_admin = isset($_SESSION['role']) && $_SESSION['role'] === 'admin';
-$is_it_or_admin = isset($_SESSION['role']) && in_array($_SESSION['role'], ['it', 'admin']);
-$can_perform_actions = $is_it_or_admin;
-$can_edit_reporter = $is_it_or_admin;
+$is_assigned_it = isset($issue['assigned_to']) && isset($_SESSION['user_id']) && $issue['assigned_to'] == $_SESSION['user_id'];
+$is_job_open = $issue['status'] !== 'done';
+
+// Admin can do anything. Assigned IT can work on open jobs.
+$can_perform_actions = ($is_assigned_it && $is_job_open) || $is_admin;
+$can_edit_reporter = ($is_assigned_it && $is_job_open) || $is_admin;
+
 
 $can_evaluate = false;
 if ($issue['status'] === 'done' && is_null($issue['signature_image'])) {
     // Evaluation button should show for the reporter OR any IT/Admin staff
-    if ($is_reporter || $is_it_or_admin) {
+    if ($is_reporter || $is_admin || $is_assigned_it) {
         $can_evaluate = true;
     }
 }
@@ -92,10 +96,8 @@ $current_category_icon = $category_icon_map[$issue['category']] ?? 'fa-question-
 // Determine reporter's division (if available)
 $reporter_division = $issue['user_id'] ? ($issue['reporter_user_division'] ?? '') : ($issue['division'] ?? '');
 ?>
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6" x-data="{ selectedStatus: '<?php echo $issue['status']; ?>', isEditingReporter: false, editingCommentId: null, deleteCommentId: null, deleteCommentText: '', isEvaluationModalOpen: false }">
-    <!-- Left Column -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6" x-data="{ selectedStatus: '<?php echo $issue['status']; ?>', isEditingReporter: false, editingCommentId: null, deleteCommentId: null, deleteCommentText: '', isEvaluationModalOpen: false, ai: { loading: false, suggestion: '', error: '' } }">
     <div class="lg:col-span-2 space-y-6">
-        <!-- Issue Details Card -->
         <div class="bg-white rounded-lg shadow-md p-6">
              <div class="flex justify-between items-start">
                 <div class="flex items-center gap-4">
@@ -130,7 +132,50 @@ $reporter_division = $issue['user_id'] ? ($issue['reporter_user_division'] ?? ''
             <?php endif; ?>
         </div>
 
-        <!-- IT Action Card: Show if user is IT or Admin -->
+        <?php if ($can_perform_actions): ?>
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="font-semibold text-gray-800 text-lg border-b pb-3 mb-4">
+                <i class="fa-solid fa-robot text-indigo-500 mr-2"></i>ผู้ช่วย AI
+            </h3>
+            <div x-show="!ai.suggestion && !ai.loading">
+                <p class="text-sm text-gray-600 mb-4">ให้ AI ช่วยวิเคราะห์ปัญหาและแนะนำแนวทางการแก้ไขเบื้องต้น</p>
+                <button @click="
+                    ai.loading = true;
+                    ai.error = '';
+                    fetch('ai_issue_helper.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            title: '<?php echo addslashes(htmlspecialchars($issue['title'])); ?>',
+                            description: '<?php echo addslashes(htmlspecialchars($issue['description'])); ?>',
+                            category: '<?php echo addslashes(htmlspecialchars($issue['category'])); ?>'
+                        })
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        if(data.success) {
+                            ai.suggestion = data.suggestion;
+                        } else {
+                            ai.error = 'ไม่สามารถเรียกข้อมูลได้';
+                        }
+                    })
+                    .catch(() => ai.error = 'เกิดข้อผิดพลาดในการเชื่อมต่อ')
+                    .finally(() => ai.loading = false)
+                " class="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-semibold hover:bg-indigo-700">
+                    <i class="fa-solid fa-brain mr-2"></i>เริ่มการวิเคราะห์
+                </button>
+            </div>
+            <div x-show="ai.loading" class="text-center text-gray-500">
+                <i class="fa-solid fa-spinner fa-spin text-2xl"></i>
+                <p class="mt-2">AI กำลังวิเคราะห์ข้อมูล...</p>
+            </div>
+            <div x-show="ai.suggestion" x-transition class="prose max-w-none text-gray-700 bg-indigo-50 p-4 rounded-lg">
+                <pre class="bg-transparent p-0 whitespace-pre-wrap font-sans" x-text="ai.suggestion"></pre>
+            </div>
+            <div x-show="ai.error" x-text="ai.error" class="text-red-500 mt-2"></div>
+        </div>
+        <?php endif; ?>
+
         <?php if ($can_perform_actions): ?>
         <div class="bg-white p-6 rounded-lg shadow-md">
            <h3 class="font-semibold mb-4 text-gray-800 text-lg border-b pb-3">ดำเนินการ</h3>
@@ -189,7 +234,6 @@ $reporter_division = $issue['user_id'] ? ($issue['reporter_user_division'] ?? ''
         </div>
         <?php endif; ?>
 
-        <!-- Checklist Card (Show if user is IT or Admin) -->
         <?php if ($can_perform_actions): ?>
         <div class="bg-white rounded-lg shadow-md p-6" x-data="checklistHandler(<?php echo $issue['id']; ?>, <?php echo htmlspecialchars($json_checklist_items_db, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML401); ?>)">
             <div class="flex justify-between items-center mb-4 border-b pb-3">
@@ -225,7 +269,6 @@ $reporter_division = $issue['user_id'] ? ($issue['reporter_user_division'] ?? ''
         </div>
         <?php endif; ?>
 
-        <!-- Comments History Card -->
         <div class="bg-white rounded-lg shadow-md p-6">
             <h3 class="font-semibold text-lg mb-4 text-gray-800">ประวัติการดำเนินการ</h3>
             <div class="space-y-4">
@@ -248,7 +291,6 @@ $reporter_division = $issue['user_id'] ? ($issue['reporter_user_division'] ?? ''
                                 <?php endif; ?>
                             </div>
                             
-                            <!-- Display Comment -->
                             <div x-show="editingCommentId !== <?php echo $comment['id']; ?>" class="text-gray-700 bg-gray-100 p-3 rounded-lg mt-1">
                                 <p><?php echo nl2br(htmlspecialchars($comment['comment_text'])); ?></p>
                                 <?php if (!empty($comment['files']) || !empty($comment['attachment_link'])): ?>
@@ -278,7 +320,6 @@ $reporter_division = $issue['user_id'] ? ($issue['reporter_user_division'] ?? ''
                                 <?php endif; ?>
                             </div>
 
-                            <!-- Edit Comment Form -->
                             <form x-show="editingCommentId === <?php echo $comment['id']; ?>" action="comment_action.php" method="POST" class="mt-2">
                                 <?php echo generate_csrf_token(); ?>
                                 <input type="hidden" name="action" value="edit_comment">
@@ -300,12 +341,9 @@ $reporter_division = $issue['user_id'] ? ($issue['reporter_user_division'] ?? ''
         </div>
     </div>
     
-    <!-- Right Column -->
     <div class="lg:sticky top-24 space-y-6 self-start">
-        <!-- Status Card -->
         <div class="bg-white rounded-lg shadow-md p-6">
-             <!-- Display Mode -->
-            <div x-show="!isEditingReporter" class="space-y-4">
+             <div x-show="!isEditingReporter" class="space-y-4">
                 <div>
                     <div class="flex justify-between items-center">
                         <h3 class="font-semibold text-gray-800">ผู้แจ้ง</h3>
@@ -327,7 +365,6 @@ $reporter_division = $issue['user_id'] ? ($issue['reporter_user_division'] ?? ''
                 <div><h3 class="font-semibold text-gray-800">ผู้รับผิดชอบ</h3><p class="text-gray-600"><?php echo getUserNameById($issue['assigned_to'], $conn); ?></p></div>
             </div>
             
-            <!-- Edit Mode -->
             <?php if ($can_edit_reporter): ?>
             <form x-show="isEditingReporter" x-transition action="issue_action.php" method="POST" class="space-y-4">
                 <?php echo generate_csrf_token(); ?>
@@ -363,7 +400,6 @@ $reporter_division = $issue['user_id'] ? ($issue['reporter_user_division'] ?? ''
             <?php endif; ?>
         </div>
         
-        <!-- Closure & Satisfaction Section -->
         <div class="bg-white rounded-lg shadow-md p-6">
             <h3 class="font-semibold text-lg text-gray-800 mb-4">การยืนยันและประเมินผล</h3>
             <?php if ($can_evaluate): ?>
@@ -373,8 +409,7 @@ $reporter_division = $issue['user_id'] ? ($issue['reporter_user_division'] ?? ''
                     </button>
                 </div>
              <?php elseif (!is_null($issue['signature_image'])): ?>
-                <!-- Display saved signature and rating -->
-                 <div class="space-y-4">
+                <div class="space-y-4">
                      <div>
                          <h4 class="font-semibold text-gray-800">ลายมือชื่อผู้รับบริการ</h4>
                          <div class="mt-2 p-2 border rounded-md bg-gray-50 flex justify-center">
@@ -400,8 +435,6 @@ $reporter_division = $issue['user_id'] ? ($issue['reporter_user_division'] ?? ''
         </div>
     </div>
 
-    <!-- Modals -->
-    <!-- Delete Comment Modal -->
     <div x-show="deleteCommentId !== null" @keydown.escape.window="deleteCommentId = null" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50" x-cloak>
         <div class="bg-white rounded-lg shadow-2xl max-w-sm w-full" @click.away="deleteCommentId = null">
             <div class="p-6 text-center">
@@ -420,7 +453,6 @@ $reporter_division = $issue['user_id'] ? ($issue['reporter_user_division'] ?? ''
         </div>
     </div>
 
-    <!-- Evaluation Modal -->
     <div x-show="isEvaluationModalOpen" @keydown.escape.window="isEvaluationModalOpen = false" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-60" x-cloak>
         <div class="bg-white rounded-lg shadow-2xl max-w-lg w-full" @click.away="isEvaluationModalOpen = false">
             <div class="p-4 border-b flex justify-between items-center">
@@ -561,4 +593,3 @@ $reporter_division = $issue['user_id'] ? ($issue['reporter_user_division'] ?? ''
         }
     });
 </script>
-

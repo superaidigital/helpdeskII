@@ -57,13 +57,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         redirect_with_message('it_dashboard.php', 'error', 'ไม่พบปัญหาที่ต้องการดำเนินการ');
     }
 
-    // --- **NEW**: Define Permissions based on fetched data ---
+    // --- **MODIFIED**: Define Permissions based on fetched data ---
     $is_admin = $_SESSION['role'] === 'admin';
     $is_assigned_it = $issue_to_validate['assigned_to'] !== null && $_SESSION['user_id'] === (int)$issue_to_validate['assigned_to'];
     $is_job_open = $issue_to_validate['status'] !== 'done';
 
-    $can_perform_actions = $is_assigned_it && $is_job_open;
-    $can_edit_reporter = ($is_assigned_it || $is_admin) && $is_job_open;
+    // Admin can do anything. Assigned IT can work on open jobs.
+    $can_perform_actions = ($is_assigned_it && $is_job_open) || $is_admin;
+    $can_edit_reporter = ($is_assigned_it && $is_job_open) || $is_admin;
     
     // --- Action: แก้ไขข้อมูลผู้แจ้ง ---
     if ($action === 'edit_reporter' && $can_edit_reporter) {
@@ -83,7 +84,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             redirect_with_message("issue_view.php?id=$issue_id", 'error', 'ข้อมูลไม่ถูกต้อง ไม่สามารถอัปเดตได้');
         }
     } elseif ($action === 'edit_reporter') {
-        redirect_with_message("issue_view.php?id=$issue_id", 'error', 'คุณไม่มีสิทธิ์แก้ไขข้อมูลนี้ หรือเรื่องถูกปิดไปแล้ว');
+        redirect_with_message("issue_view.php?id=$issue_id", 'error', 'คุณไม่มีสิทธิ์แก้ไขข้อมูลนี้');
     }
     
     // --- Action: อัปเดตสถานะและเพิ่มความคิดเห็น ---
@@ -93,7 +94,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $attachment_link = trim($_POST['attachment_link']);
         $completed_at_sql = "";
 
-        if ($new_status === 'done') {
+        if ($new_status === 'done' && $issue_to_validate['status'] !== 'done') {
             $completed_at_sql = ", completed_at = NOW()";
         }
         $stmt = $conn->prepare("UPDATE issues SET status = ? $completed_at_sql WHERE id = ?");
@@ -147,7 +148,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         redirect_with_message("issue_view.php?id=$issue_id", 'success', 'อัปเดตข้อมูลเรียบร้อยแล้ว');
     } elseif (isset($_POST['submit_update'])) {
-        redirect_with_message("issue_view.php?id=$issue_id", 'error', 'คุณไม่มีสิทธิ์ดำเนินการ หรือเรื่องถูกปิดไปแล้ว');
+        redirect_with_message("issue_view.php?id=$issue_id", 'error', 'คุณไม่มีสิทธิ์ดำเนินการ');
     }
 
     // --- Action: ส่งต่องาน ---
@@ -168,7 +169,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             redirect_with_message('it_dashboard.php', 'success', 'ส่งต่องานเรียบร้อยแล้ว');
         }
     } elseif (isset($_POST['submit_forward'])) {
-        redirect_with_message("issue_view.php?id=$issue_id", 'error', 'คุณไม่มีสิทธิ์ส่งต่องาน หรือเรื่องถูกปิดไปแล้ว');
+        redirect_with_message("issue_view.php?id=$issue_id", 'error', 'คุณไม่มีสิทธิ์ส่งต่องาน');
     }
 
     // --- Action: เก็บเป็น Knowledge Base ---
@@ -194,12 +195,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             redirect_with_message("issue_view.php?id=$issue_id", 'success', 'บันทึกวิธีแก้ไขลงในฐานความรู้เรียบร้อยแล้ว');
         }
     } elseif (isset($_POST['submit_kb'])) {
-        redirect_with_message("issue_view.php?id=$issue_id", 'error', 'คุณไม่มีสิทธิ์ดำเนินการ หรือเรื่องถูกปิดไปแล้ว');
+        redirect_with_message("issue_view.php?id=$issue_id", 'error', 'คุณไม่มีสิทธิ์ดำเนินการ');
     }
 }
-
-// Fallback redirect
-// header("Location: it_dashboard.php");
-// exit();
 ?>
-
