@@ -46,11 +46,10 @@ if (isset($_SESSION['role']) && $_SESSION['role'] === 'user' && !$is_reporter) {
 // --- Define Editing & Evaluation Permissions ---
 $is_admin = isset($_SESSION['role']) && $_SESSION['role'] === 'admin';
 $is_assigned_it = isset($issue['assigned_to']) && isset($_SESSION['user_id']) && $issue['assigned_to'] == $_SESSION['user_id'];
-$is_job_open = $issue['status'] !== 'done';
 
-// Admin can do anything. Assigned IT can work on open jobs.
-$can_perform_actions = ($is_assigned_it && $is_job_open) || $is_admin;
-$can_edit_reporter = ($is_assigned_it && $is_job_open) || $is_admin;
+// MODIFIED: Admin or the assigned IT staff can edit data at any time.
+$can_perform_actions = $is_assigned_it || $is_admin;
+$can_edit_reporter = $is_assigned_it || $is_admin;
 
 
 $can_evaluate = false;
@@ -70,7 +69,7 @@ $checklist_items_db = getIssueChecklistItems($issue_id, $conn);
 $default_checklist = get_checklist_by_category($issue['category']);
 $json_checklist_items_db = json_encode($checklist_items_db);
 
-// NEW: Fetch device information if it exists
+// Fetch device information if it exists
 $device_info = null;
 if (!empty($issue['device_id'])) {
     $stmt_device = $conn->prepare("SELECT * FROM issue_devices WHERE id = ?");

@@ -38,16 +38,16 @@ try {
         throw new Exception('Issue not found.');
     }
 
-    // --- FIX [START]: Allow Admin to edit any open checklist ---
+    // --- FIX [START]: Allow assigned IT and Admin to edit checklist at any time ---
     $is_admin = $_SESSION['role'] === 'admin';
     $is_assigned_it = $current_user_id === (int)$issue_to_validate['assigned_to'];
-    $is_job_open = $issue_to_validate['status'] !== 'done';
     
-    // Allow action if (user is assigned OR user is an admin) AND the job is still open.
-    if ( !($is_assigned_it || $is_admin) || !$is_job_open) {
-        throw new Exception('Permission denied: You do not have permission to modify this checklist or the issue is closed.');
+    // Allow action if the user is the assigned IT staff OR an admin.
+    if ( !($is_assigned_it || $is_admin) ) {
+        throw new Exception('Permission denied: You do not have permission to modify this checklist.');
     }
     // --- FIX [END] ---
+
 
     // --- Database Transaction ---
     $conn->autocommit(FALSE);
@@ -103,7 +103,7 @@ try {
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);
 
 } finally {
-    // Always restore autocommit
+    // Always restore autocommit and close the connection
     if (isset($conn) && $conn->ping()) {
         $conn->autocommit(TRUE);
         $conn->close();
