@@ -27,7 +27,7 @@ try {
         throw new Exception('Invalid or empty data provided.');
     }
 
-    // --- **NEW**: Detailed Permission Check ---
+    // --- Detailed Permission Check ---
     $stmt_check_perm = $conn->prepare("SELECT assigned_to, status FROM issues WHERE id = ?");
     $stmt_check_perm->bind_param("i", $issue_id);
     $stmt_check_perm->execute();
@@ -38,12 +38,16 @@ try {
         throw new Exception('Issue not found.');
     }
 
+    // --- FIX [START]: Allow Admin to edit any open checklist ---
+    $is_admin = $_SESSION['role'] === 'admin';
     $is_assigned_it = $current_user_id === (int)$issue_to_validate['assigned_to'];
     $is_job_open = $issue_to_validate['status'] !== 'done';
     
-    if (!$is_assigned_it || !$is_job_open) {
-        throw new Exception('Permission denied: You are not assigned to this issue or it is already closed.');
+    // Allow action if (user is assigned OR user is an admin) AND the job is still open.
+    if ( !($is_assigned_it || $is_admin) || !$is_job_open) {
+        throw new Exception('Permission denied: You do not have permission to modify this checklist or the issue is closed.');
     }
+    // --- FIX [END] ---
 
     // --- Database Transaction ---
     $conn->autocommit(FALSE);
@@ -87,19 +91,22 @@ try {
         throw new Exception('Failed to commit transaction.');
     }
 
-    echo json_encode(['success' => true]);
+    echo json_encode(['success' => true, 'message' => 'บันทึก Checklist เรียบร้อยแล้ว']);
 
 } catch (Exception $e) {
-    if ($conn->ping() && $conn->autocommit) {
+    // Make sure to rollback transaction on error
+    if (isset($conn) && $conn->ping() && !$conn->autocommit) {
          $conn->rollback();
     }
     error_log("Checklist Action Error: " . $e->getMessage());
-    http_response_code(403); // Forbidden
+    http_response_code(403); // Use a relevant error code like Forbidden
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);
 
 } finally {
+    // Always restore autocommit
     if (isset($conn) && $conn->ping()) {
         $conn->autocommit(TRUE);
+        $conn->close();
     }
 }
 ?>

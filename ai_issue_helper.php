@@ -8,7 +8,7 @@ check_auth(['it', 'admin']);
 // =================================================================
 // !!! กรุณากรอก API Key ของคุณที่นี่ !!!
 define('GEMINI_API_KEY', 'AIzaSyCEHI88GtEHBHEE2C1vjrOyKKVv-1kl5W4'); 
-define('GEMINI_API_URL', 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=' . GEMINI_API_KEY);
+define('GEMINI_API_URL', 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' . GEMINI_API_KEY);
 
 /**
  * ฟังก์ชันสำหรับเรียกใช้ Gemini API พร้อมการจัดการข้อผิดพลาดที่ละเอียดขึ้น
